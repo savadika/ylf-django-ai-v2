@@ -26,7 +26,7 @@ services:
     build:
       context: .
       dockerfile: docker/mysql/Dockerfile
-    image: ${MYSQL_CONTAINER_NAME}:latest # <--- 显式指定镜像名
+    image: ${MYSQL_IMAGE:-framework-mysql:local}
     container_name: ${MYSQL_CONTAINER_NAME}
     restart: unless-stopped
     volumes:
@@ -34,6 +34,12 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$${MYSQL_ROOT_PASSWORD}\" mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
     networks:
       - ylf-network
     ports:
@@ -43,7 +49,7 @@ services:
   backend:
     build:
       context: ./UniDjango
-    image: ${BACKEND_CONTAINER_NAME}:latest # <--- 显式指定镜像名
+    image: ${BACKEND_IMAGE:-framework-django:local}
     container_name: ${BACKEND_CONTAINER_NAME}
     restart: unless-stopped
     environment:
@@ -76,13 +82,12 @@ services:
       REDIS_PORT: ${REDIS_INTERNAL_PORT}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     command: >
-      sh -c "python manage.py migrate --noinput &&
-      gunicorn UniDjango.wsgi:application --bind 0.0.0.0:8000 --timeout 300 --workers 2"
+      gunicorn UniDjango.wsgi:application --bind 0.0.0.0:8000 --timeout 300 --workers 2
     volumes:
       - ./UniDjango/media:/app/media:z
     depends_on:
       db:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
@@ -98,7 +103,7 @@ services:
       context: ./frontend  # <--- 注意这里改成了相对路径
       args:
         VUE_APP_BASE_API: /prod-api
-    image: ${FRONTEND_CONTAINER_NAME}:latest # <--- 显式指定镜像名
+    image: ${FRONTEND_IMAGE:-framework-vue:local}
     container_name: ${FRONTEND_CONTAINER_NAME}
     restart: unless-stopped
     ports:
@@ -106,7 +111,7 @@ services:
       - "${FRONTEND_PORT}:${FRONTEND_INTERNAL_PORT}" # 映射到其他端口
     volumes:
       - ./UniDjango/media:/media:ro,z  # 媒体文件由 Nginx 直接托管
-      - ./frontend/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro,z  # 便于更新反代配置
+
     depends_on:
       - backend
     networks:

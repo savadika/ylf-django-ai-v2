@@ -40,6 +40,11 @@ jobs:
       - name: Install frontend dependencies
         working-directory: business/frontend
         run: npm ci
+      - name: Validate production Compose
+        env:
+          BACKEND_IMAGE: ghcr.io/example/ylf-django-backend:ci
+          FRONTEND_IMAGE: ghcr.io/example/ylf-django-frontend:ci
+        run: docker compose --env-file business/.env.example -f business/docker-compose.yml config --quiet
       - name: Run full quality gate
         run: python ai/quality/quality.py full --backend-runtime local --frontend-runtime local
       - name: Upload quality evidence
@@ -83,3 +88,157 @@ jobs:
           path: |
             ai/reports
             ai/cockpit/index.html
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      release_id: ${{ github.ref_name }}
+    env:
+      REGISTRY: ghcr.io
+      BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/ylf-django-backend
+      FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/ylf-django-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push backend
+        id: backend
+        uses: docker/build-push-action@v6
+        with:
+          context: business/UniDjango
+          file: business/UniDjango/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ github.ref_name }}
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+          provenance: true
+          sbom: true
+      - name: Build and push frontend
+        id: frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: business/frontend
+          file: business/frontend/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VUE_APP_BASE_API=/prod-api
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ github.ref_name }}
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          provenance: true
+          sbom: true
+      - name: Create release manifest
+        run: |
+          python business/scripts/release_manifest.py create \
+            --release-id "${{ github.ref_name }}" \
+            --commit-sha "${{ github.sha }}" \
+            --source-ref "${{ github.ref }}" \
+            --backend-image "${BACKEND_IMAGE}@${{ steps.backend.outputs.digest }}" \
+            --frontend-image "${FRONTEND_IMAGE}@${{ steps.frontend.outputs.digest }}" \
+            --output "dist/release-manifest.json"
+      - name: Upload release manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest
+          path: dist/release-manifest.json
+          retention-days: 90
+      - name: Create deployment bundle
+        run: |
+          tar -czf dist/deployment-bundle.tgz \
+            dist/release-manifest.json \
+            business/docker-compose.yml \
+            business/scripts/deploy-release.sh \
+            business/scripts/rollback-release.sh \
+            business/scripts/release_manifest.py
+      - name: Upload deployment bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-bundle
+          path: dist/deployment-bundle.tgz
+          retention-days: 90
+
+  deploy:
+    if: startsWith(github.ref, 'refs/tags/v') && vars.ENABLE_AUTO_DEPLOY == 'true'
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    concurrency:
+      group: ylf-django-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - name: Download deployment bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-bundle
+          path: dist
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+      - name: Log in server to GHCR
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" |
+            ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/deploy_key" \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "sudo docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin"
+      - name: Upload deployment bundle
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          scp -P "$DEPLOY_PORT" -i "$HOME/.ssh/deploy_key" \
+            dist/deployment-bundle.tgz \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/ylf-release-${{ github.run_id }}.tgz"
+      - name: Deploy and verify
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/deploy_key" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "sudo mkdir -p '${DEPLOY_PATH}' &&
+             sudo tar -xzf '/tmp/ylf-release-${{ github.run_id }}.tgz' \
+               -C '${DEPLOY_PATH}' &&
+             sudo bash '${DEPLOY_PATH}/business/scripts/deploy-release.sh' \
+               '${DEPLOY_PATH}/dist/release-manifest.json'"

@@ -261,8 +261,12 @@ def gates_for_profile(
     frontend_min = policy["coverage"]["frontend_min_percent"]
     deploy_environment = {
         "DEBUG": "False",
-        "DJANGO_SECRET_KEY": "quality-release-check-only-secret-key",
-        "JWT_SECRET_KEY": "quality-release-check-only-jwt-key",
+        "DJANGO_SECRET_KEY": (
+            "quality-release-check-only-secret-key-0123456789abcdef0123456789"
+        ),
+        "JWT_SECRET_KEY": (
+            "quality-release-check-only-jwt-key-0123456789abcdef0123456789"
+        ),
         "DJANGO_ALLOWED_HOSTS": "example.com",
         "TRUSTED_PROXY_COUNT": "1",
         "DJANGO_SECURE_SSL_REDIRECT": "True",
@@ -470,6 +474,8 @@ def gates_for_profile(
                         "business/UniDjango/manage.py",
                         "check",
                         "--deploy",
+                        "--fail-level",
+                        "WARNING",
                         "--settings=UniDjango.test_settings",
                     ],
                     deploy_environment,

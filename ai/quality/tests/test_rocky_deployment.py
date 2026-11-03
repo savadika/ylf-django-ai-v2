@@ -40,7 +40,9 @@ class RockyDeploymentTests(unittest.TestCase):
             "MYSQL_ROOT_PASSWORD",
             "REDIS_PASSWORD",
             "firewall-cmd --permanent --add-port",
-            "compose_prod up -d --build --remove-orphans",
+            "compose_prod build",
+            "python manage.py migrate --noinput",
+            "compose_prod up -d --no-build --remove-orphans",
         ):
             self.assertIn(marker, self.script)
 

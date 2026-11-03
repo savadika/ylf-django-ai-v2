@@ -2,16 +2,22 @@
 import os
 
 os.environ.setdefault("DEBUG", "True")
-os.environ.setdefault("DJANGO_SECRET_KEY", "test-only-django-secret")
-os.environ.setdefault("JWT_SECRET_KEY", "test-only-jwt-secret-at-least-32-bytes")
+os.environ.setdefault(
+    "DJANGO_SECRET_KEY",
+    "test-only-django-secret-key-0123456789abcdef0123456789",
+)
+os.environ.setdefault(
+    "JWT_SECRET_KEY",
+    "test-only-jwt-secret-key-0123456789abcdef0123456789",
+)
 
 from .settings import *  # noqa: E402,F403
 
 TESTING = True
 DEBUG = False
 SWAGGER_ENABLED = False
-SECRET_KEY = "test-only-django-secret"
-JWT_SECRET_KEY = "test-only-jwt-secret-at-least-32-bytes"
+SECRET_KEY = "test-only-django-secret-key-0123456789abcdef0123456789"
+JWT_SECRET_KEY = "test-only-jwt-secret-key-0123456789abcdef0123456789"
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
 
 DATABASES = {

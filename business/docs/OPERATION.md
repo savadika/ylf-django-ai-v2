@@ -189,3 +189,15 @@ make -C business dev-down
 - 生产 Nginx 统一发送 CSP、HSTS、禁止 iframe、MIME 嗅探保护和 referrer 策略。
 - `.env` 和管理员凭证不能提交到 Git，也不能放入工单、聊天记录或构建日志。
 - 建议定期备份数据库、Redis 和媒体目录，并验证恢复流程。
+
+## 5. CI/CD 发布与回滚
+
+日常生产发布不再在服务器执行 `git pull` 后重新构建。推送 `v*` 标签后，CI
+会运行 release 门禁、构建并推送固定 digest 镜像、生成
+`release-manifest.json`。设置 `ENABLE_AUTO_DEPLOY=true` 后，受保护的
+`production` Environment 会调用 `business/scripts/deploy-release.sh` 完成
+备份、部署和健康检查。
+
+人工回滚使用 `business/scripts/rollback-release.sh`。发布清单可通过
+`business/scripts/release_manifest.py` 校验。完整配置、必需 secrets 和数据库
+恢复边界见 [CI/CD 发布与回滚](RELEASE.md)。

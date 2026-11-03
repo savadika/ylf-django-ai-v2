@@ -449,7 +449,10 @@ log "校验 Docker Compose 配置"
 compose_prod config --quiet
 
 log "构建并启动生产环境"
-compose_prod up -d --build --remove-orphans
+compose_prod build
+compose_prod up -d --no-build db redis
+compose_prod run --rm --no-deps backend python manage.py migrate --noinput
+compose_prod up -d --no-build --remove-orphans
 
 log "等待前端和后端就绪"
 READY=0

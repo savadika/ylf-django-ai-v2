@@ -102,4 +102,23 @@ make -C business dev
 make -C business dev-down
 ```
 
+## CI/CD 发布与回滚
+
+推送 `v*` 标签后，GitHub Actions 会先运行 `release` 门禁，再把前后端固定
+版本镜像推送到 GHCR，并生成 `release-manifest.json`。生产自动上线默认关闭；
+只有设置仓库变量 `ENABLE_AUTO_DEPLOY=true` 并在受保护的 `production`
+Environment 中配置 SSH 与 GHCR secrets 后才会执行。
+
+服务器日常发布使用清单驱动的 `deploy-release.sh`，回滚使用
+`rollback-release.sh`。发布清单由 `release_manifest.py` 生成和校验，部署前
+会备份 MySQL，健康检查失败时自动恢复上一版本。
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+完整的首次启用、secrets、人工部署和数据库恢复边界见
+[CI/CD 发布与回滚](business/docs/RELEASE.md)。
+
 完整说明见 [business/docs/OPERATION.md](business/docs/OPERATION.md)。

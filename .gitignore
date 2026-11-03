@@ -4,6 +4,8 @@ redis_data/
 .env
 business/.env
 business/.deploy-credentials
+business/releases/
+business/backups/
 
 # 上传的媒体文件（运行时数据；默认头像 avatars/default.png 保留提交）
 business/UniDjango/media/uploads/
