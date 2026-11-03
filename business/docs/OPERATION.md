@@ -201,3 +201,24 @@ make -C business dev-down
 人工回滚使用 `business/scripts/rollback-release.sh`。发布清单可通过
 `business/scripts/release_manifest.py` 校验。完整配置、必需 secrets 和数据库
 恢复边界见 [CI/CD 发布与回滚](RELEASE.md)。
+
+## 6. Docker CE 安装源容错
+
+`deploy-rocky.sh` 会优先下载阿里云 Docker CE 仓库和 GPG key，失败时自动
+回退 Docker 官方源。下载使用 curl 重试，GPG key 保存到本地后写入仓库文件，
+DNF 仍执行完整签名校验。
+
+如需指定内部可信镜像仓库：
+
+```bash
+sudo DOCKER_CE_REPO_URL=https://mirrors.example/docker-ce.repo \
+  bash business/scripts/deploy-rocky.sh --host 你的服务器IP或域名
+```
+
+如果两个来源都失败，先检查：
+
+```bash
+curl -I https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+curl -I https://download.docker.com/linux/centos/docker-ce.repo
+dnf repolist
+```

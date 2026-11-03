@@ -16,6 +16,10 @@ ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@example.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 REGISTRY_MIRROR="${DOCKER_REGISTRY_MIRROR:-}"
+DOCKER_CE_REPO_URL="${DOCKER_CE_REPO_URL:-}"
+DOCKER_CE_REPO_ALIYUN="${DOCKER_CE_REPO_ALIYUN:-https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo}"
+DOCKER_CE_REPO_OFFICIAL="${DOCKER_CE_REPO_OFFICIAL:-https://download.docker.com/linux/centos/docker-ce.repo}"
+DOCKER_CE_GPG_PATH="/etc/pki/rpm-gpg/docker-ce.gpg"
 BACKEND_PORT=""
 SKIP_FIREWALL=0
 RESET_ADMIN=0
@@ -167,18 +171,103 @@ fi
 log "安装 Rocky Linux 基础工具和 Docker CE"
 dnf -y install dnf-plugins-core ca-certificates curl git openssl python3 tar firewalld
 
-if ! rpm -q docker-ce >/dev/null 2>&1; then
-    if ! dnf repolist | grep -q '^docker-ce-stable'; then
-        dnf -y config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+download_docker_repo_file() {
+    local url="$1"
+    local output="$2"
+    curl -fL --retry 5 --retry-delay 2 --retry-all-errors \
+        --connect-timeout 15 --max-time 180 "$url" -o "$output"
+}
+
+configure_docker_repo() {
+    local repo_url="$1"
+    local temp_repo
+    local temp_key
+    local gpg_url
+    temp_repo="$(mktemp)"
+    temp_key="$(mktemp)"
+
+    log "下载 Docker CE 仓库定义：$repo_url"
+    if ! download_docker_repo_file "$repo_url" "$temp_repo"; then
+        rm -f "$temp_repo" "$temp_key"
+        return 1
     fi
-    dnf -y install \
-        docker-ce \
-        docker-ce-cli \
-        containerd.io \
-        docker-buildx-plugin \
-        docker-compose-plugin
+    if ! grep -q '^\[docker-ce-stable\]' "$temp_repo"; then
+        warn "仓库文件缺少 docker-ce-stable 配置：$repo_url"
+        rm -f "$temp_repo" "$temp_key"
+        return 1
+    fi
+
+    gpg_url="$(awk -F= '/^gpgkey=/{print $2; exit}' "$temp_repo")"
+    gpg_url="${gpg_url:-$(dirname "$repo_url")/gpg}"
+    log "下载 Docker CE GPG key：$gpg_url"
+    if ! download_docker_repo_file "$gpg_url" "$temp_key"; then
+        rm -f "$temp_repo" "$temp_key"
+        return 1
+    fi
+    if ! rpm --import "$temp_key"; then
+        warn "Docker CE GPG key 导入失败：$gpg_url"
+        rm -f "$temp_repo" "$temp_key"
+        return 1
+    fi
+
+    install -D -m 0644 "$temp_key" "$DOCKER_CE_GPG_PATH" || {
+        rm -f "$temp_repo" "$temp_key"
+        return 1
+    }
+    sed -i "s|^gpgkey=.*|gpgkey=file://${DOCKER_CE_GPG_PATH}|" "$temp_repo" || {
+        rm -f "$temp_repo" "$temp_key"
+        return 1
+    }
+    install -m 0644 "$temp_repo" /etc/yum.repos.d/docker-ce.repo || {
+        rm -f "$temp_repo" "$temp_key"
+        return 1
+    }
+    rm -f "$temp_repo" "$temp_key"
+    log "Docker CE 仓库已配置为本地 GPG 校验：$repo_url"
+    return 0
+}
+
+install_docker_ce() {
+    local candidate
+    local seen=" "
+    local candidates=()
+    [[ -n "$DOCKER_CE_REPO_URL" ]] && candidates+=("$DOCKER_CE_REPO_URL")
+    candidates+=("$DOCKER_CE_REPO_ALIYUN" "$DOCKER_CE_REPO_OFFICIAL")
+
+    for candidate in "${candidates[@]}"; do
+        [[ -n "$candidate" ]] || continue
+        [[ "$seen" == *" $candidate "* ]] && continue
+        seen="${seen}${candidate} "
+        if ! configure_docker_repo "$candidate"; then
+            warn "Docker CE 仓库不可用，尝试下一个来源：$candidate"
+            continue
+        fi
+        if ! dnf -y makecache --refresh >/dev/null; then
+            warn "Docker CE 仓库元数据刷新失败，尝试下一个来源：$candidate"
+            continue
+        fi
+        if dnf -y --setopt=retries=5 --setopt=timeout=30 install \
+            docker-ce \
+            docker-ce-cli \
+            containerd.io \
+            docker-buildx-plugin \
+            docker-compose-plugin; then
+            return 0
+        fi
+        warn "从仓库安装 Docker CE 失败，尝试下一个来源：$candidate"
+    done
+    return 1
+}
+
+NEED_DOCKER_INSTALL=0
+for package in docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; do
+    rpm -q "$package" >/dev/null 2>&1 || NEED_DOCKER_INSTALL=1
+done
+
+if (( NEED_DOCKER_INSTALL == 1 )); then
+    install_docker_ce || die "所有 Docker CE 仓库来源均不可用"
 else
-    dnf -y install docker-compose-plugin docker-buildx-plugin
+    log "Docker CE、Buildx 和 Compose 插件已安装，跳过软件包下载"
 fi
 
 systemctl enable --now docker

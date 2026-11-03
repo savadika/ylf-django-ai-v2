@@ -146,3 +146,16 @@ Actions 页面出现两条记录是正常的：一条对应 `main`，另一条�
 [CI/CD 发布与回滚](business/docs/RELEASE.md)。
 
 完整说明见 [business/docs/OPERATION.md](business/docs/OPERATION.md)。
+
+## Docker CE 安装源容错
+
+Rocky Linux 一键部署会优先使用阿里云 Docker CE 镜像，失败后自动回退到
+Docker 官方源。仓库定义和 GPG key 下载均带重试，GPG key 会保存到
+`/etc/pki/rpm-gpg/docker-ce.gpg` 后由 DNF 本地校验，不会使用 `--nogpgcheck`。
+
+需要指定其他可信镜像时，可通过 `DOCKER_CE_REPO_URL` 覆盖首选仓库：
+
+```bash
+sudo DOCKER_CE_REPO_URL=https://mirrors.example/docker-ce.repo \
+  bash business/scripts/deploy-rocky.sh --host 你的服务器IP或域名
+```

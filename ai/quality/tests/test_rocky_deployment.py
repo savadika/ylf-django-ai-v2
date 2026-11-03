@@ -96,6 +96,24 @@ class RockyDeploymentTests(unittest.TestCase):
             for legacy in LEGACY_SCRIPTS:
                 self.assertNotIn(Path(legacy).name, content)
 
+    def test_docker_repo_network_fallback_ac_001(self) -> None:
+        for marker in (
+            "DOCKER_CE_REPO_URL",
+            "DOCKER_CE_REPO_ALIYUN",
+            "DOCKER_CE_REPO_OFFICIAL",
+            "curl -fL --retry 5 --retry-delay 2 --retry-all-errors",
+            "rpm --import",
+            "gpgkey=file://${DOCKER_CE_GPG_PATH}",
+            "dnf -y --setopt=retries=5 --setopt=timeout=30 install",
+        ):
+            self.assertIn(marker, self.script)
+        self.assertNotIn("--nogpgcheck", self.script)
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        operation = (ROOT / "business/docs/OPERATION.md").read_text(encoding="utf-8")
+        for content in (readme, operation):
+            self.assertIn("DOCKER_CE_REPO_URL", content)
+
     def test_shell_syntax_when_bash_is_available(self) -> None:
         bash = shutil.which("bash")
         if bash is None:
