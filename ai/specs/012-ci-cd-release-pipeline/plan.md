@@ -3,7 +3,7 @@
 ## 方案
 
 继续复用 GitHub Actions 现成的质量门禁。tag 流水线先运行 `release`，再构建
-后端和前端多架构镜像并推送到 GHCR。构建结果与发布清单保存在同一个 artifact
+后端和前端镜像并推送到 GHCR。构建结果与发布清单保存在同一个 artifact
 中，部署 job 通过受保护的 `production` 环境读取 SSH 和 GHCR 凭证。
 
 服务器侧新增两个职责单一的脚本：
@@ -29,7 +29,7 @@
 
 - 用静态契约测试锁定 workflow、Compose、脚本和文档中的关键安全边界。
 - 用 Python 单元测试验证发布清单生成、校验和拒绝非法 digest。
-- 在 CI 中用 Docker Buildx 实际构建多架构镜像；在真实 Rocky 主机启用
+- 在 CI 中用 Docker Buildx 实际构建发布镜像；在真实 Rocky 主机启用
   `ENABLE_AUTO_DEPLOY` 后执行首次自动部署和人工回滚演练。
 - 运行 quick、full 和 release 门禁，保留 `ai/reports/report.json`。
 

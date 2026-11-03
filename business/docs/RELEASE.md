@@ -6,6 +6,8 @@
 - 推送 `v*` 标签后依次执行 `validate → release → publish → deploy`。
 - `publish` 将前后端镜像推送到 GHCR，并使用 image digest 生成
   `release-manifest.json`。
+- 当前生产服务器为 x86_64，CI 只构建 `linux/amd64` 镜像；若要支持 ARM64，
+  需要重新启用并验证多架构构建。
 - `publish` 同时生成 `deployment-bundle.tgz`，包含本次发布清单、生产 Compose
   及部署/回滚脚本，避免服务器继续依赖手工 `git pull`。
 - `deploy` 默认关闭。只有仓库变量 `ENABLE_AUTO_DEPLOY=true` 时才连接生产

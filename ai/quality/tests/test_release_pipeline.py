@@ -120,9 +120,10 @@ class ReleasePipelineContractTests(unittest.TestCase):
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("packages: write", workflow)
         self.assertIn("docker/build-push-action@v6", workflow)
-        self.assertIn("docker/setup-qemu-action@v3", workflow)
         self.assertIn("docker/setup-buildx-action@v3", workflow)
-        self.assertIn("platforms: linux/amd64,linux/arm64", workflow)
+        self.assertIn("platforms: linux/amd64", workflow)
+        self.assertNotIn("linux/arm64", workflow)
+        self.assertNotIn("docker/setup-qemu-action", workflow)
         self.assertIn("push: true", workflow)
         self.assertIn("needs: release", workflow)
         self.assertIn(
