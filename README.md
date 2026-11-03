@@ -159,3 +159,15 @@ Docker 官方源。仓库定义和 GPG key 下载均带重试，GPG key 会保�
 sudo DOCKER_CE_REPO_URL=https://mirrors.example/docker-ce.repo \
   bash business/scripts/deploy-rocky.sh --host 你的服务器IP或域名
 ```
+
+### Docker Hub 镜像源回退
+
+如果服务器无法直连 Docker Hub，一键部署会自动探测并配置以下 mirror：
+
+- `https://docker.m.daocloud.io`
+- `https://docker.1ms.run`
+- `https://docker.xuanyuan.me`
+
+只有探测可达的地址会写入 `/etc/docker/daemon.json`。`--mirror` 指定的
+地址优先，并保留已有 mirror 配置；所有 mirror 和 Docker Hub 直连都失败时，
+脚本会在构建前终止。

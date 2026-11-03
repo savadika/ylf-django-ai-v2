@@ -16,6 +16,11 @@ ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@example.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 REGISTRY_MIRROR="${DOCKER_REGISTRY_MIRROR:-}"
+DEFAULT_REGISTRY_MIRRORS=(
+    "https://docker.m.daocloud.io"
+    "https://docker.1ms.run"
+    "https://docker.xuanyuan.me"
+)
 DOCKER_CE_REPO_URL="${DOCKER_CE_REPO_URL:-}"
 DOCKER_CE_REPO_ALIYUN="${DOCKER_CE_REPO_ALIYUN:-https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo}"
 DOCKER_CE_REPO_OFFICIAL="${DOCKER_CE_REPO_OFFICIAL:-https://download.docker.com/linux/centos/docker-ce.repo}"
@@ -279,22 +284,62 @@ if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
     log "已将 $SUDO_USER 加入 docker 组；重新登录后可免 sudo 使用 Docker。"
 fi
 
-configure_registry_mirror() {
-    [[ -n "$REGISTRY_MIRROR" ]] || return 0
-    [[ "$REGISTRY_MIRROR" =~ ^https?://[^[:space:]]+$ ]] || {
-        die "--mirror 必须是有效的 http(s) URL"
-    }
+probe_registry_source() {
+    local source="${1%/}"
+    local status
+    status="$(curl -sS -o /dev/null -w '%{http_code}' \
+        --connect-timeout 5 --max-time 10 "${source}/v2/" 2>/dev/null || true)"
+    case "$status" in
+        200|401|403) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
-    log "配置 Docker registry mirror：$REGISTRY_MIRROR"
+configure_registry_mirror() {
+    local selected_mirrors=()
+    local candidate
+    local seen=" "
+
+    if [[ -n "$REGISTRY_MIRROR" ]]; then
+        [[ "$REGISTRY_MIRROR" =~ ^https?://[^[:space:]]+$ ]] || {
+            die "--mirror 必须是有效的 http(s) URL"
+        }
+        REGISTRY_MIRROR="${REGISTRY_MIRROR%/}"
+        selected_mirrors+=("$REGISTRY_MIRROR")
+        seen="${seen}${REGISTRY_MIRROR} "
+        log "使用用户指定的 Docker registry mirror：$REGISTRY_MIRROR"
+    fi
+
+    for candidate in "${DEFAULT_REGISTRY_MIRRORS[@]}"; do
+        candidate="${candidate%/}"
+        [[ "$seen" == *" $candidate "* ]] && continue
+        if probe_registry_source "$candidate"; then
+            log "Docker registry mirror 可达：$candidate"
+            selected_mirrors+=("$candidate")
+            seen="${seen}${candidate} "
+        else
+            warn "Docker registry mirror 不可达：$candidate"
+        fi
+    done
+
+    if (( ${#selected_mirrors[@]} == 0 )); then
+        if probe_registry_source "https://registry-1.docker.io"; then
+            log "Docker Hub 直连可用，不配置 registry mirror"
+            return 0
+        fi
+        die "所有 Docker 镜像来源均不可达；请通过 --mirror 指定可信 registry mirror"
+    fi
+
+    log "配置 Docker registry mirrors：${selected_mirrors[*]}"
     mkdir -p /etc/docker
-    python3 - "$REGISTRY_MIRROR" <<'PY'
+    python3 - "${selected_mirrors[@]}" <<'PY'
 import json
 import os
 import stat
 import sys
 import tempfile
 
-mirror = sys.argv[1].rstrip("/")
+mirrors_to_add = [item.rstrip("/") for item in sys.argv[1:] if item.strip()]
 path = "/etc/docker/daemon.json"
 data = {}
 if os.path.exists(path):
@@ -307,12 +352,16 @@ if os.path.exists(path):
         raise SystemExit(f"现有 {path} 根节点必须是 JSON 对象")
     data = loaded
 
-mirrors = data.get("registry-mirrors")
-if not isinstance(mirrors, list):
-    mirrors = []
-normalized = [item.rstrip("/") for item in mirrors if isinstance(item, str) and item.strip()]
-if mirror not in normalized:
-    normalized.insert(0, mirror)
+existing = data.get("registry-mirrors")
+if not isinstance(existing, list):
+    existing = []
+normalized = []
+for mirror in mirrors_to_add + existing:
+    if not isinstance(mirror, str):
+        continue
+    mirror = mirror.rstrip("/")
+    if mirror and mirror not in normalized:
+        normalized.append(mirror)
 data["registry-mirrors"] = normalized
 
 mode = stat.S_IMODE(os.stat(path).st_mode) if os.path.exists(path) else 0o644
@@ -330,7 +379,6 @@ PY
     dockerd --validate --config-file=/etc/docker/daemon.json
     systemctl restart docker
 }
-
 configure_registry_mirror
 
 random_hex() {

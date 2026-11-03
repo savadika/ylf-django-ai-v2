@@ -222,3 +222,24 @@ curl -I https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
 curl -I https://download.docker.com/linux/centos/docker-ce.repo
 dnf repolist
 ```
+
+## 7. Docker Hub 镜像源回退
+
+`deploy-rocky.sh` 会探测 `docker.m.daocloud.io`、`docker.1ms.run` 和
+`docker.xuanyuan.me`，将可达地址写入 Docker daemon 的 registry mirrors。
+无需手动传 `--mirror`；显式指定的 `--mirror` 仍具有最高优先级。
+
+如果服务器使用内部镜像，可执行：
+
+```bash
+sudo bash business/scripts/deploy-rocky.sh \
+  --host 你的服务器IP或域名 \
+  --mirror https://你的可信镜像地址
+```
+
+镜像地址应提供 Docker Registry v2 接口。检查方式：
+
+```bash
+curl -I https://docker.m.daocloud.io/v2/
+docker info --format '{{json .RegistryConfig.Mirrors}}'
+```

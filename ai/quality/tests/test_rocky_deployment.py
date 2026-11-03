@@ -114,6 +114,27 @@ class RockyDeploymentTests(unittest.TestCase):
         for content in (readme, operation):
             self.assertIn("DOCKER_CE_REPO_URL", content)
 
+    def test_registry_mirror_default_fallback_ac_001(self) -> None:
+        for marker in (
+            "DEFAULT_REGISTRY_MIRRORS",
+            "https://docker.m.daocloud.io",
+            "https://docker.1ms.run",
+            "https://docker.xuanyuan.me",
+            "probe_registry_source",
+            "curl -sS -o /dev/null -w '%{http_code}'",
+            "https://registry-1.docker.io",
+            "\"${source}/v2/\"",
+            "selected_mirrors+=(\"$REGISTRY_MIRROR\")",
+            "mirrors_to_add = [item.rstrip",
+            "所有 Docker 镜像来源均不可达",
+        ):
+            self.assertIn(marker, self.script)
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        operation = (ROOT / "business/docs/OPERATION.md").read_text(encoding="utf-8")
+        for content in (readme, operation):
+            self.assertIn("docker.m.daocloud.io", content)
+
     def test_shell_syntax_when_bash_is_available(self) -> None:
         bash = shutil.which("bash")
         if bash is None:
