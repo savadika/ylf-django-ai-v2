@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: unidjango-quality-quick
+        name: UniDjango quick quality gate
+        entry: python ai/quality/quality.py quick
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

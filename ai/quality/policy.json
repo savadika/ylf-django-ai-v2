@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "coverage": {
+    "backend_min_percent": 35,
+    "frontend_min_percent": 20
+  },
+  "required_docs": [
+    "README.md",
+    "AGENTS.md",
+    "business/docs/OPERATION.md",
+    "ai/README.md",
+    "ai/docs/CODING_STANDARDS.md",
+    "ai/docs/QUALITY_GATES.md",
+    "ai/docs/COCKPIT.md",
+    "ai/docs/PROJECT_STRUCTURE.md",
+    "ai/specs/README.md",
+    "ai/cockpit/index.html"
+  ],
+  "required_scripts": [
+    "ai/quality/quality.py",
+    "ai/quality/qualitylib/runner.py",
+    "ai/quality/qualitylib/specs.py",
+    "ai/quality/qualitylib/docs.py",
+    "ai/quality/qualitylib/cockpit.py",
+    "ai/quality/pyproject.toml"
+  ]
+}

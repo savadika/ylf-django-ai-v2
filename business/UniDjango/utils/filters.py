@@ -1,0 +1,274 @@
+from django_filters import rest_framework as django_filters
+from django.db.models import Q
+from rest_framework import filters
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.decorators import action
+from django.db import models
+
+from utils.response import Ok
+
+
+# 不对外暴露为查询参数的字段（敏感字段或内部字段）
+EXCLUDED_FILTER_FIELDS = {'password'}
+
+
+class ComplexQueryMixin:
+    """
+    复杂查询混入类
+    为ViewSet提供复杂查询功能，包括高级搜索和筛选选项接口
+    """
+    
+    # 默认的过滤、搜索、排序配置
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = []  # 子类需要定义
+    ordering_fields = ['id', 'create_time', 'update_time']  # 默认可排序字段
+    ordering = []  # 默认不覆盖 queryset 自身排序，避免破坏业务默认顺序
+    
+    @action(detail=False, methods=['get'], url_path='advanced-search')
+    def advanced_search(self, request):
+        """
+        高级搜索接口
+        支持复杂的查询条件组合
+        
+        通用查询参数：
+        - create_time_start: 创建时间开始（YYYY-MM-DD）
+        - create_time_end: 创建时间结束（YYYY-MM-DD）
+        - update_time_start: 更新时间开始（YYYY-MM-DD）
+        - update_time_end: 更新时间结束（YYYY-MM-DD）
+        - status: 状态
+        - search: 关键词搜索
+        - ordering: 排序字段（如：id, -id）
+        - page: 页码
+        - page_size: 每页数量
+        """
+        # 获取查询参数
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # 分页
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return Ok(data=self.get_paginated_response(serializer.data).data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Ok(data=serializer.data)
+    
+    @action(detail=False, methods=['get'], url_path='filter-options')
+    def filter_options(self, request):
+        """
+        获取筛选选项
+        返回可用的筛选条件选项
+        """
+        model = self.get_queryset().model
+        options = {
+            'ordering_options': self.get_ordering_options()
+        }
+        
+        # 如果模型有status字段，获取状态选项
+        if hasattr(model, 'status'):
+            status_field = model._meta.get_field('status')
+            if hasattr(status_field, 'choices') and status_field.choices:
+                options['status_options'] = [
+                    {'value': choice[0], 'label': choice[1]} 
+                    for choice in status_field.choices
+                ]
+        
+        # 获取时间范围
+        date_range = self.get_date_range()
+        if date_range:
+            options['date_range'] = date_range
+        
+        return Ok(data=options)
+    
+    def get_ordering_options(self):
+        """
+        获取排序选项
+        子类可以重写此方法来自定义排序选项
+        """
+        ordering_options = []
+        
+        for field in self.ordering_fields:
+            # 获取字段的verbose_name
+            try:
+                model = self.get_queryset().model
+                field_obj = model._meta.get_field(field)
+                field_label = field_obj.verbose_name
+            except:
+                field_label = field
+            
+            ordering_options.extend([
+                {'value': field, 'label': f'{field_label}升序'},
+                {'value': f'-{field}', 'label': f'{field_label}降序'}
+            ])
+        
+        return ordering_options
+    
+    def get_date_range(self):
+        """
+        获取日期范围
+        """
+        model = self.get_queryset().model
+        date_fields = []
+        
+        # 检查常见的日期字段
+        for field_name in ['create_time', 'update_time', 'created_at', 'updated_at']:
+            if hasattr(model, field_name):
+                date_fields.append(field_name)
+        
+        if not date_fields:
+            return None
+        
+        # 构建聚合查询
+        aggregate_dict = {}
+        for field in date_fields:
+            aggregate_dict[f'min_{field}'] = models.Min(field)
+            aggregate_dict[f'max_{field}'] = models.Max(field)
+        
+        date_range_data = model.objects.aggregate(**aggregate_dict)
+        
+        result = {}
+        for field in date_fields:
+            result[field] = {
+                'min': date_range_data.get(f'min_{field}'),
+                'max': date_range_data.get(f'max_{field}')
+            }
+        
+        return result
+
+
+class TextSearchMixin:
+    """
+    文本搜索混入类
+    提供通用的文本搜索功能
+    """
+    
+    @classmethod
+    def create_text_search_filter(cls, search_fields):
+        """
+        创建文本搜索过滤器
+        
+        Args:
+            search_fields: 要搜索的字段列表，如 ['name', 'description']
+        
+        Returns:
+            过滤器方法
+        """
+        def filter_search(self, queryset, name, value):
+            if value and search_fields:
+                q_objects = Q()
+                for field in search_fields:
+                    q_objects |= Q(**{f'{field}__icontains': value})
+                return queryset.filter(q_objects)
+            return queryset
+        
+        return filter_search
+
+
+def create_complex_filter_class(model, search_fields=None, extra_filters=None, auto_detect_fields=True):
+    """
+    动态创建复杂查询过滤器类
+    
+    Args:
+        model: Django模型类
+        search_fields: 搜索字段列表，用于全局搜索
+        extra_filters: 额外的过滤器字典
+        auto_detect_fields: 是否自动检测模型字段并创建过滤器
+    
+    Returns:
+        动态创建的过滤器类
+    """
+    class_name = f'{model.__name__}ComplexFilter'
+    attrs = {}
+    base_fields = ['search']
+
+    attrs['search'] = django_filters.CharFilter(method='filter_search', label='关键词搜索')
+
+    model_fields = {}
+    for field in model._meta.get_fields():
+        if hasattr(field, 'name'):
+            model_fields[field.name] = field
+
+    if 'id' in model_fields:
+        attrs['id'] = django_filters.NumberFilter(field_name='id', label='ID')
+        base_fields.append('id')
+
+    if 'status' in model_fields:
+        attrs['status'] = django_filters.NumberFilter(field_name='status', label='状态')
+        base_fields.append('status')
+
+    for time_field_name in ('create_time', 'update_time'):
+        field = model_fields.get(time_field_name)
+        if isinstance(field, (models.DateField, models.DateTimeField)):
+            filter_cls = django_filters.DateTimeFilter if isinstance(field, models.DateTimeField) else django_filters.DateFilter
+            start_lookup = 'date__gte' if isinstance(field, models.DateTimeField) else 'gte'
+            end_lookup = 'date__lte' if isinstance(field, models.DateTimeField) else 'lte'
+            attrs[f'{time_field_name}_start'] = filter_cls(
+                field_name=time_field_name,
+                lookup_expr=start_lookup,
+                label=f'{getattr(field, "verbose_name", time_field_name)}开始',
+            )
+            attrs[f'{time_field_name}_end'] = filter_cls(
+                field_name=time_field_name,
+                lookup_expr=end_lookup,
+                label=f'{getattr(field, "verbose_name", time_field_name)}结束',
+            )
+            base_fields.extend([f'{time_field_name}_start', f'{time_field_name}_end'])
+
+    if auto_detect_fields:
+        for field in model_fields.values():
+            field_name = field.name
+            if field_name in {'id', 'status', 'create_time', 'update_time'} or field_name in EXCLUDED_FILTER_FIELDS:
+                continue
+
+            if isinstance(field, (models.CharField, models.TextField)):
+                attrs[field_name] = django_filters.CharFilter(
+                    field_name=field_name,
+                    lookup_expr='icontains',
+                    label=getattr(field, 'verbose_name', field_name),
+                )
+                base_fields.append(field_name)
+            elif isinstance(field, (models.IntegerField, models.BigIntegerField, models.SmallIntegerField)):
+                attrs[field_name] = django_filters.NumberFilter(
+                    field_name=field_name,
+                    label=getattr(field, 'verbose_name', field_name),
+                )
+                base_fields.append(field_name)
+            elif isinstance(field, models.ForeignKey):
+                attrs[field_name] = django_filters.NumberFilter(
+                    field_name=field_name,
+                    label=getattr(field, 'verbose_name', field_name),
+                )
+                base_fields.append(field_name)
+            elif isinstance(field, (models.DateField, models.DateTimeField)):
+                filter_cls = django_filters.DateTimeFilter if isinstance(field, models.DateTimeField) else django_filters.DateFilter
+                start_lookup = 'date__gte' if isinstance(field, models.DateTimeField) else 'gte'
+                end_lookup = 'date__lte' if isinstance(field, models.DateTimeField) else 'lte'
+                attrs[f'{field_name}_start'] = filter_cls(
+                    field_name=field_name,
+                    lookup_expr=start_lookup,
+                    label=f'{getattr(field, "verbose_name", field_name)}开始',
+                )
+                attrs[f'{field_name}_end'] = filter_cls(
+                    field_name=field_name,
+                    lookup_expr=end_lookup,
+                    label=f'{getattr(field, "verbose_name", field_name)}结束',
+                )
+                base_fields.extend([f'{field_name}_start', f'{field_name}_end'])
+
+    if search_fields:
+        attrs['filter_search'] = TextSearchMixin.create_text_search_filter(search_fields)
+    else:
+        attrs['filter_search'] = lambda self, queryset, name, value: queryset
+
+    if extra_filters:
+        attrs.update(extra_filters)
+        for key in extra_filters.keys():
+            if key not in base_fields and not key.startswith('filter_'):
+                base_fields.append(key)
+
+    attrs['Meta'] = type('Meta', (), {
+        'model': model,
+        'fields': base_fields,
+    })
+
+    return type(class_name, (django_filters.FilterSet,), attrs)
