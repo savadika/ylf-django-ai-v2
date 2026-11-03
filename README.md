@@ -113,10 +113,34 @@ Environment 中配置 SSH 与 GHCR secrets 后才会执行。
 `rollback-release.sh`。发布清单由 `release_manifest.py` 生成和校验，部署前
 会备份 MySQL，健康检查失败时自动恢复上一版本。
 
-```bash
-git tag v1.0.0
-git push origin v1.0.0
+### 提交代码
+
+日常修改先提交并推送到 `main`：
+
+```powershell
+cd D:\ylf\ylf-django-v2
+git status --short
+git add -A
+git commit -m "说明本次修改"
+git push origin main
 ```
+
+这次推送只触发 `main` 分支的质量检查，不会构建正式发布镜像。
+
+### 发布版本
+
+代码检查通过，并且确认需要正式发布后，再创建并推送版本标签：
+
+```powershell
+git tag v1.0.6
+git push origin v1.0.6
+```
+
+标签名必须使用尚未使用过的新版本号。标签推送会触发第二条 Actions
+记录，依次运行质量检查、镜像构建、发布清单生成和可选的自动部署。
+
+因此，分别执行 `git push origin main` 和 `git push origin v1.0.6` 后，
+Actions 页面出现两条记录是正常的：一条对应 `main`，另一条对应版本标签。
 
 完整的首次启用、secrets、人工部署和数据库恢复边界见
 [CI/CD 发布与回滚](business/docs/RELEASE.md)。
