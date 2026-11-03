@@ -41,7 +41,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # AI validation reports (cockpit stays versioned)
-ai/reports/
+ai/reports/*
+!ai/reports/.gitkeep
 
 # Local SQLite/cache data used by the non-Docker development fallback
 business/.local/

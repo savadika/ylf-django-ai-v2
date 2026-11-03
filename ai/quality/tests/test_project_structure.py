@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import subprocess
 import unittest
 
 
@@ -93,6 +94,30 @@ class ProjectStructureTests(unittest.TestCase):
                 (ROOT / relative).exists(),
                 f"AI 工作区缺少：{relative}",
             )
+
+    def test_reports_placeholder_survives_clean_checkout_ac_001(self) -> None:
+        placeholder = ROOT / "ai/reports/.gitkeep"
+        self.assertTrue(placeholder.is_file(), "ai/reports/.gitkeep 缺少")
+        completed = subprocess.run(
+            ["git", "check-ignore", "-q", "ai/reports/.gitkeep"],
+            cwd=ROOT,
+            check=False,
+        )
+        self.assertEqual(
+            completed.returncode,
+            1,
+            "ai/reports/.gitkeep 仍被 Git 忽略",
+        )
+        report_ignored = subprocess.run(
+            ["git", "check-ignore", "-q", "ai/reports/report.json"],
+            cwd=ROOT,
+            check=False,
+        )
+        self.assertEqual(
+            report_ignored.returncode,
+            0,
+            "ai/reports/report.json 不应进入版本控制",
+        )
 
     def test_business_tree_has_no_legacy_ai_paths(self) -> None:
         removed = (
