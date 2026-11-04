@@ -1,5 +1,16 @@
 # 开发驾驶舱
 
+## 登录首页集成
+
+质量工具生成独立驾驶舱时，也会刷新
+`business/UniDjango/cockpit/snapshot.html`。登录后的 `/dashboard` 首页通过受 JWT 和
+`system:dashboard:view` 权限保护的 `GET /cockpit/snapshot` 读取这份只读快照，并在禁用脚本的
+沙箱 iframe 中展示。
+
+嵌入式快照会隐藏独立页顶部导航和一键测试区域；一键测试仍只从本机
+`python ai/quality/quality.py serve` 运行。修改驾驶舱内容后执行
+`python ai/quality/quality.py cockpit`，独立页面和登录首页快照会同步刷新。
+
 驾驶舱是仓库状态的本地视图，来源包括规格 Markdown、源码目录和最近一次验证报告。它不连接
 生产数据库，也不会读取 `business/.env` 中的密钥。页面本身仍是单文件静态产物；通过本地
 `serve` 打开时会额外启用“一键测试核心功能”。

@@ -20,7 +20,7 @@ from user.models import SysUser
 
 DEFAULT_MENU_TREE = [
     {
-        'name': '首页',
+        'name': '驾驶舱',
         'menu_type': 'C',
         'path': '/dashboard',
         'component': 'dashboard/index',

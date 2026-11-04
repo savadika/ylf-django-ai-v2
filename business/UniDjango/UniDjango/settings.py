@@ -112,6 +112,7 @@ INSTALLED_APPS = [
     'role.apps.RoleConfig',  #角色模块配置
     'department.apps.DepartmentConfig',  #部门模块配置
     'log.apps.LogConfig',  #日志监控模块配置
+    'cockpit.apps.CockpitConfig',
     'rest_framework',  # Django REST framework
     'corsheaders',  #  跨域请求处理
     'django_filters',  # Django过滤器支持

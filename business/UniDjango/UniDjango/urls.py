@@ -21,6 +21,7 @@ from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from UniDjango.health import HealthCheckView
+from cockpit.views import CockpitSnapshotView
 from utils.upload import UploadFileView
 
 # Swagger 配置
@@ -39,6 +40,7 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     re_path(r'^healthz/?$', HealthCheckView.as_view(), name='healthz'),
+    path('cockpit/snapshot', CockpitSnapshotView.as_view(), name='cockpit-snapshot'),
     re_path(r'^user(?:/|$)', include('user.urls')), # 用户模块，支持带/和不带/
     re_path(r'^department(?:/|$)', include('department.urls')), # 部门模块，支持带/和不带/
     re_path(r'^role(?:/|$)', include('role.urls')), # 角色模块，支持带/和不带/

@@ -736,6 +736,28 @@ COCKPIT_JS = """
 })();
 """
 
+EMBEDDED_CSS = """
+body.embedded .topbar,
+body.embedded .skip-link,
+body.embedded .regression-panel,
+body.embedded .footer {
+  display: none !important;
+}
+body.embedded main {
+  width: min(1280px, calc(100% - 32px));
+  padding: 18px 0 30px;
+}
+body.embedded .hero {
+  border-radius: 18px;
+}
+@media (max-width: 760px) {
+  body.embedded main {
+    width: min(1280px, calc(100% - 24px));
+    padding-top: 12px;
+  }
+}
+"""
+
 
 def _load_report(path: Path) -> tuple[dict[str, Any] | None, str]:
     if not path.is_file():
@@ -1202,4 +1224,22 @@ def build_cockpit(root: Path) -> Path:
 </html>
 """
     output.write_text(html, encoding="utf-8")
+
+    embedded_html = html.replace(
+        "<body>",
+        '<body class="embedded">',
+        1,
+    ).replace(
+        f"<script>{COCKPIT_JS}</script>",
+        "",
+    ).replace(
+        "</head>",
+        f"<style>{EMBEDDED_CSS}</style></head>",
+        1,
+    )
+    frontend_snapshot = (
+        root / "business" / "UniDjango" / "cockpit" / "snapshot.html"
+    )
+    frontend_snapshot.parent.mkdir(parents=True, exist_ok=True)
+    frontend_snapshot.write_text(embedded_html, encoding="utf-8")
     return output

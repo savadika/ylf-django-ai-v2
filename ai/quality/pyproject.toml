@@ -15,6 +15,7 @@ source = [
   "business/UniDjango/menu",
   "business/UniDjango/department",
   "business/UniDjango/log",
+  "business/UniDjango/cockpit",
   "business/UniDjango/utils",
 ]
 omit = [

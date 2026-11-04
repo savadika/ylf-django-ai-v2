@@ -37,6 +37,7 @@
 | `menu/` | 菜单、角色菜单关系和动态前端组件路径 |
 | `department/` | 部门 |
 | `log/` | 请求日志、异常日志和请求中间件 |
+| `cockpit/` | 登录后展示的工程驾驶舱快照和鉴权 API |
 | `utils/` | 响应信封、ViewSet 基类、过滤、分页、上传、媒体 URL 等横切能力 |
 | `media/` | 运行时上传媒体；仅默认头像作为种子资源保留 |
 
@@ -83,6 +84,7 @@ src/views/404.vue
 - `ai/specs/<NNN-slug>/`：每次行为改动的事实来源。
 - `ai/reports/report.json`：最近一次质量报告，被驾驶舱读取。
 - `ai/cockpit/index.html`：可提交、可直接浏览的静态驾驶舱。
+- `business/UniDjango/cockpit/snapshot.html`：由质量工具生成、经鉴权 API 提供给登录首页的只读快照。
 
 根目录只保留工具协议强制要求的 AI 适配入口：`AGENTS.md`、`.agents/`、`.claude/`、
 `.pre-commit-config.yaml` 和 `.github/workflows/quality.yml`。它们不得承载业务逻辑。

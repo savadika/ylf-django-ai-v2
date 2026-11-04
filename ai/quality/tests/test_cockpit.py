@@ -72,6 +72,29 @@ class CockpitTests(unittest.TestCase):
             self.assertIn("代码资产", html)
             self.assertIn("常用命令", html)
 
+    def test_frontend_snapshot_is_generated_without_scripts_ac_003(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "ai" / "specs").mkdir(parents=True)
+            (root / "business" / "UniDjango" / "cockpit").mkdir(parents=True)
+            (root / "business" / "frontend").mkdir()
+
+            build_cockpit(root)
+
+            snapshot = (
+                root
+                / "business"
+                / "UniDjango"
+                / "cockpit"
+                / "snapshot.html"
+            )
+            html = snapshot.read_text(encoding="utf-8")
+            self.assertIn('<body class="embedded">', html)
+            self.assertIn(".regression-panel", html)
+            self.assertIn("display: none !important", html)
+            self.assertNotIn("<script", html)
+            self.assertIn('id="dashboard-title"', html)
+
     def test_one_click_core_test_controls_ac_001_ac_004(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

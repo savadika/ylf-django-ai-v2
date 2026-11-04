@@ -394,6 +394,7 @@ def gates_for_profile(
                         "menu",
                         "department",
                         "log",
+                        "cockpit",
                         "--settings=UniDjango.test_settings",
                     ],
                     {"COVERAGE_RCFILE": "ai/quality/pyproject.toml"},
